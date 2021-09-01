@@ -831,6 +831,12 @@ app.post(PREFIX+"/registerUser",(req,res)=>{
 				db.query('insert into users(username,email,password_hash,created_on,roles_id,avatar,recovery_hash) values($1,$2,$3,$4,(select id from roles where name=\'Guest\'),$5,$6)',[req.body.username,req.body.email,req.body.password,new Date(),req.body.avatar,req.body.userID])
 			}
 		})
+		.catch((err)=>{
+			console.log(err.message)
+			res.status(500).send(err.message)
+		})
+	} else {
+		res.status(500).send("Unsupported operation!")
 	}
 })
 
@@ -845,6 +851,9 @@ app.post(PREFIX+"/validUser",(req,res)=>{
 			} else {
 				res.status(200).json({verified:false})
 			}
+		})
+		.catch((err)=>{
+			res.status(500).send(err.message)
 		})
 	} else {
 		db.query('select * from users where username=$1 and password_hash=$2 limit 1',[req.body.username,sh.SecretHash(req.body.password)])
