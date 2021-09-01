@@ -770,6 +770,24 @@ app.get(PREFIX+'/test/dataid',async(req,res)=>{
 	res.status(200).json(finalresult)
 })
 
+app.post(PREFIX+"/registerUser",(req,res)=>{
+	
+	if (req.body.recoveryhash&&req.body.password) {
+		//A recovery hash means this is an external login. Try seeing if it matches.
+		db.query('select * from users where recovery_hash=$1 limit 1',[req.body.recoveryhash])
+		.then((data)=>{
+			if (data.rows.length>0) {
+				db.query('update users set password_hash=$2 where id=$1',[data.rows[0].id,req.body.password])
+				res.status(200).json({verified:true})
+			} else {
+				res.status(200).json({verified:true})
+				//This doesn't exist. At this time we will register them since this is external.
+				db.query('insert into users(username,email,password_hash,created_on,roles_id,avatar,recovery_hash) values($1,$2,$3,$4,(select id from roles where name=\'Guest\'),$5,$6)',[req.body.username,req.body.email,req.body.password,new Date(),req.body.avatar,req.body.userID])
+			}
+		})
+	}
+})
+
 app.post(PREFIX+"/validUser",(req,res)=>{
 	//console.log(sh.SecretHash("098f6bcd4621d373cade4e832627b4f6"))
 	if (req.body.recoveryhash&&req.body.password) {
