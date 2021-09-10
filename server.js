@@ -816,29 +816,55 @@ app.get(PREFIX+'/test/dataid',async(req,res)=>{
 	res.status(200).json(finalresult)
 })
 
-app.post(PREFIX+"/registerUser",(req,res)=>{
-	
+function registerUsers(req,res){
 	if (req.body.recoveryhash&&req.body.password) {
-		//A recovery hash means this is an external login. Try seeing if it matches.
-		db.query('select * from users where recovery_hash=$1 limit 1',[req.body.recoveryhash])
-		.then((data)=>{
-			if (data.rows.length>0) {
-				db.query('update users set password_hash=$2 where id=$1',[data.rows[0].id,req.body.password])
-				res.status(200).json({verified:true})
+		db.query('select * from users where email=$1',[req.body.email])
+		.then((data)=>{ 
+			if (data.rows.length==0) {
+				return db.query('select * from users where recovery_hash=$1 limit 1',[req.body.recoveryhash])
+				.then((data)=>{
+					if (data.rows.length>0) {
+						db.query('update users set password_hash=$2 where id=$1',[data.rows[0].id,req.body.password])
+						db2.query('update users set password_hash=$2 where id=$1',[data.rows[0].id,req.body.password])
+						res.status(200).json({verified:true})
+					} else {
+						res.status(200).json({verified:true})
+						//This doesn't exist. At this time we will register them since this is external.
+						db.query('insert into users(username,email,password_hash,created_on,roles_id,avatar,recovery_hash) values($1,$2,$3,$4,(select id from roles where name=\'Guest\'),$5,$6) returning id',[req.body.username,req.body.email,req.body.password,new Date(),req.body.avatar,req.body.userID])
+						.then((data)=>{
+							if (data.rows.length>0) {
+								db2.query('insert into users(username,email,password_hash,created_on,roles_id,avatar,recovery_hash,id) values($1,$2,$3,$4,(select id from roles where name=\'Guest\'),$5,$6,$7) returning id',[req.body.username,req.body.email,req.body.password,new Date(),req.body.avatar,req.body.userID,data.rows[0].id])
+							}
+						})
+						.catch((err)=>{
+							console.log(err.message)
+						})
+					}
+				})
+				.catch((err)=>{
+					console.log(err.message)
+					res.status(500).send(err.message)
+				})
 			} else {
+				console.log("User with email '"+req.body.email+"' already exists assume it's not a google account. Overwriting...")
+				db.query('update users set password_hash=$1,avatar=$2,recovery_hash=$3 where id=$4 returning id',[req.body.password,req.body.avatar,req.body.userID,data.rows[0].id])
+				.then((data)=>{
+					if (data.rows.length>0) {
+						db2.query('update users set password_hash=$1,avatar=$2,recovery_hash=$3 where id=$4 returning id',[req.body.password,req.body.avatar,req.body.userID,data.rows[0].id])
+					}
+				})
 				res.status(200).json({verified:true})
-				//This doesn't exist. At this time we will register them since this is external.
-				db.query('insert into users(username,email,password_hash,created_on,roles_id,avatar,recovery_hash) values($1,$2,$3,$4,(select id from roles where name=\'Guest\'),$5,$6)',[req.body.username,req.body.email,req.body.password,new Date(),req.body.avatar,req.body.userID])
 			}
 		})
 		.catch((err)=>{
-			console.log(err.message)
-			res.status(500).send(err.message)
+			
 		})
 	} else {
 		res.status(500).send("Unsupported operation!")
 	}
-})
+}
+
+app.post(PREFIX+"/registerUser",registerUsers)
 
 app.post(PREFIX+"/validUser",(req,res)=>{
 	//console.log(sh.SecretHash("098f6bcd4621d373cade4e832627b4f6"))
@@ -847,7 +873,7 @@ app.post(PREFIX+"/validUser",(req,res)=>{
 		db.query('select * from users where recovery_hash=$1 and password_hash=$2 limit 1',[req.body.recoveryhash,req.body.password])
 		.then((data)=>{
 			if (data.rows.length>0) {
-				res.status(200).json({verified:true})
+				res.status(200).json({verified:true,avatar:data.rows[0].avatar})
 			} else {
 				res.status(200).json({verified:false})
 			}
