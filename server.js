@@ -4,7 +4,13 @@ var http = require('http');
 var https = require('https');
 const fs = require('fs');
 
-const sh = require('secrethash'); 
+const sh = require('./secrethash'); 
+const disc = require("discord-oauth2");
+var refreshToken=""
+const discord = new disc({
+	clientId: "885738904685281291",
+	clientSecret: process.env.NGSPLANNER_CLIENT_SECRET,
+	redirectUri: "https://localhost:3000#/login",});
 
 var key = fs.readFileSync('./projectdivar.com/privkey1.pem');
 var cert = fs.readFileSync('./projectdivar.com/cert1.pem');
@@ -427,6 +433,41 @@ for (var test of ["","/test"]) {
 			res.status(500).send(err.message)
 		})
 	})
+	
+	app.get(PREFIX+test+"/userData",(req,res)=>{
+		if (req.query.token) {
+			discord.tokenRequest({
+				code:req.query.token,
+				grantType: "authorization_code",
+				scope: ["identify", "email"],
+			})
+			.then(res2=>{return discord.getUser(res2.access_token)})
+			.then(res2=>{
+				//Sample output. We can register the user from here.
+				//{"id":"176012829076226048","username":"sigonasr2","avatar":"c19b2f2a9d530f9f99efa3b1b573d7ef","discriminator":"6262","public_flags":0,"flags":0,"banner":"e0668c23567d5b58e88ea916306ec6d5","banner_color":null,"accent_color":null,"locale":"en-US","mfa_enabled":false,"premium_type":2,"email":"sigonasr2@gmail.com","verified":true}
+				/*var obj = {
+					body:{
+						recoveryhash:res2.id,
+						password:req.query.token,
+						username:res2.username,
+						avatar:"https://cdn.discordapp.com/avatars/"+res2.id+"/"+res2.avatar+".png",
+						userID:res2.id,
+						email:res2.email
+					}
+				}
+				registerUsers(obj,res)*/
+				res2.token=sh(req.query.token)
+				res.status(200).json(res2)
+			})
+			.catch((err)=>{
+				//console.log(err.response)
+				res.status(500).send("Everything is not fine")
+			})
+			//res.status(200).send("Everything is fine")
+		} else {
+			res.status(500).send("Everything is not fine")
+		}
+	})
 }
 
 function CreateDynamicEndpoints() {
@@ -824,8 +865,8 @@ function registerUsers(req,res){
 				return db.query('select * from users where recovery_hash=$1 limit 1',[req.body.recoveryhash])
 				.then((data)=>{
 					if (data.rows.length>0) {
-						db.query('update users set password_hash=$2 where id=$1',[data.rows[0].id,req.body.password])
-						db2.query('update users set password_hash=$2 where id=$1',[data.rows[0].id,req.body.password])
+						db.query('update users set username=$3,password_hash=$2 where id=$1',[data.rows[0].id,req.body.password,req.body.username])
+						db2.query('update users set username=$3,password_hash=$2 where id=$1',[data.rows[0].id,req.body.password,req.body.username])
 						res.status(200).json({verified:true})
 					} else {
 						res.status(200).json({verified:true})
@@ -847,10 +888,11 @@ function registerUsers(req,res){
 				})
 			} else {
 				console.log("User with email '"+req.body.email+"' already exists assume it's not a google account. Overwriting...")
-				db.query('update users set password_hash=$1,avatar=$2,recovery_hash=$3 where id=$4 returning id',[req.body.password,req.body.avatar,req.body.userID,data.rows[0].id])
+				//console.log(req.body.password)
+				db.query('update users set password_hash=$1,avatar=$2,recovery_hash=$3,username=$5 where id=$4 returning id',[req.body.password,req.body.avatar,req.body.userID,data.rows[0].id,req.body.username])
 				.then((data)=>{
 					if (data.rows.length>0) {
-						db2.query('update users set password_hash=$1,avatar=$2,recovery_hash=$3 where id=$4 returning id',[req.body.password,req.body.avatar,req.body.userID,data.rows[0].id])
+						db2.query('update users set password_hash=$1,avatar=$2,recovery_hash=$3,username=$5 where id=$4 returning id',[req.body.password,req.body.avatar,req.body.userID,data.rows[0].id,req.body.username])
 					}
 				})
 				res.status(200).json({verified:true})
@@ -865,9 +907,10 @@ function registerUsers(req,res){
 }
 
 app.post(PREFIX+"/registerUser",registerUsers)
+app.post(PREFIX+"/test/registerUser",registerUsers)
 
-app.post(PREFIX+"/validUser",(req,res)=>{
-	//console.log(sh.SecretHash("098f6bcd4621d373cade4e832627b4f6"))
+function validUser(req,res) {
+	//console.log(sh("098f6bcd4621d373cade4e832627b4f6"))
 	if (req.body.recoveryhash&&req.body.password) {
 		//A recovery hash means this is an external login. Try seeing if it matches something.
 		db.query('select * from users where recovery_hash=$1 and password_hash=$2 limit 1',[req.body.recoveryhash,req.body.password])
@@ -882,7 +925,7 @@ app.post(PREFIX+"/validUser",(req,res)=>{
 			res.status(500).send(err.message)
 		})
 	} else {
-		db.query('select * from users where username=$1 and password_hash=$2 limit 1',[req.body.username,sh.SecretHash(req.body.password)])
+		db.query('select * from users where username=$1 and password_hash=$2 limit 1',[req.body.username,sh(req.body.password)])
 		.then((data)=>{
 			if (data.rows.length>0) {
 				res.status(200).json({verified:true})
@@ -894,7 +937,10 @@ app.post(PREFIX+"/validUser",(req,res)=>{
 			res.status(500).send(err.message)
 		})
 	}
-})
+}
+
+app.post(PREFIX+"/validUser",validUser)
+app.post(PREFIX+"/test/validUser",validUser)
 
 app.post(PREFIX+"/saveskilltree",(req,res)=>{
 	db4.query('select * from password where password=$1',[req.body.pass])
@@ -953,7 +999,7 @@ function submitBuild(req,res,db,send) {
 		db.query('select users.username from builds join users on users_id=users.id where builds.id=$1',[req.body.id])
 		.then((data)=>{
 			console.log(data.rows)
-			if (data.rows.length>0&&data.rows[0].username===req.body.username&&data.rows[0].password_hash===sh.SecretHash(req.body.pass)) {
+			if (data.rows.length>0&&data.rows[0].username===req.body.username&&data.rows[0].password_hash===sh(req.body.pass)) {
 				return db.query('update builds set creator=$1,build_name=$2,class1=(SELECT id from class WHERE name=$3 limit 1),class2=(SELECT id from class WHERE name=$4 limit 1),last_modified=$5,data=$6 where id=$7 returning id',[req.body.creator,req.body.build_name,req.body.class1,req.body.class2,new Date(),req.body.data,req.body.id])
 					.then((data)=>{
 						if (send) {
