@@ -25,7 +25,8 @@ CREATE TABLE "food" (
   "weak_point_dmg" boolean,
   "hp_recovery" boolean,
   "popularity" int,
-  "editors_choice" int
+  "editors_choice" int,
+  "rarity" int
 );
 
 CREATE TABLE "class" (
@@ -163,7 +164,8 @@ CREATE TABLE "augment" (
   "pb_gauge_build" float,
   "popularity" int,
   "editors_choice" int,
-  "element_id" int
+  "element_id" int,
+  "icon" text
 );
 
 CREATE TABLE "skill" (
@@ -209,8 +211,7 @@ CREATE TABLE "weapon_existence_data" (
 
 CREATE TABLE "augment_type" (
   "id" SERIAL UNIQUE PRIMARY KEY,
-  "name" text,
-  "icon" text
+  "name" text
 );
 
 CREATE TABLE "photon_art" (
