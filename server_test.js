@@ -1040,6 +1040,58 @@ app.get(PREFIX+"/test/getBuild",(req,res)=>{
 	})
 })
 
+function buildsGet(req,res,db) {
+	function FilterQuery(filter_type,filter){
+		function ConvertFilterType(fil) {
+			switch(fil) {
+				case "author":{return "creator"}break;
+				case "build":{return "build_name"}break;
+				case "editors_choice":{return "editors_choice"}break;
+				case "class1":{return "class1"}break;
+				case "class2":{return "class2"}break;
+			}
+		}
+		return `${filter_type?`where ${ConvertFilterType(filter_type)} ilike '%${filter}%'`:""}`
+	}
+	function SortQuery(sort_type){
+		function ConvertSortType(sor) {
+			switch (sor) {
+				case "date_updated":{return "last_modified desc"}break;
+				case "alphabetical":{return "build_name asc"}break;
+				case "date_created":{return "created_on desc"}break;
+				case "popularity":{return "likes desc"}break
+				case "editors_choice":{return "editors_choice desc"}break;
+				case "author":{return "creator asc"}break;
+			}
+		}
+		return `${sort_type?`order by ${ConvertSortType(sort_type)}`:""}`
+	}
+	function OffsetQuery(page){
+		return `${page?`offset ${page*20}`:""}`
+	}
+
+	//No args gets recent 20 builds.
+	//sort_type can be date_updated(default), alphabetical, date_created, popularity, editors_choice, author.
+	//filter_type can be author,build,editors_choice,class1,class2
+	//filter is the actual contents of the filter.
+	//page can be a number, a new page is generated every 20 builds.
+	db.query('select * from builds '+FilterQuery(req.query.filter_type,req.query.filter)+' '+SortQuery(req.query.sort_type)+' limit 20 '+OffsetQuery(req.query.page),[])
+	.then((data)=>{
+		res.status(200).json(data.rows[0])
+	})
+	.catch((err)=>{
+		res.status(500).send(err.message)
+	})
+}
+
+app.get(PREFIX+"/getBuilds",(req,res)=>{
+	buildsGet(req,res,db)
+})
+
+app.get(PREFIX+"/test/getBuilds",(req,res)=>{
+	buildsGet(req,res,db2)
+})
+
 //Generates our table schema:
 ENDPOINTDATA.forEach((endpoint)=>{
 	console.log(endpoint.endpoint+":\n\t"+endpoint.requiredfields.join('\t')+(endpoint.optionalfields.length>0?"\t":"")+endpoint.optionalfields.join("\t"))
