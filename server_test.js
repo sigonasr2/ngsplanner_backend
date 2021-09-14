@@ -10,6 +10,12 @@ const db = new Pool({
     rejectUnauthorized: false
   }
 });
+const db2 = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 const PORT = process.env.PORT || 5000;
 app.use(bodyParser.json())
 app.use(
@@ -147,7 +153,7 @@ const ENDPOINTDATA=[
 	},
 	{
 		endpoint:"food",
-		requiredfields:["name"],
+		requiredfields:["name","rarity"],
 		optionalfields:["potency","pp","dmg_res","hp","pp_consumption","pp_recovery","weak_point_dmg","hp_recovery","popularity","editors_choice"],
 		excludedfields:[] //Fields to not output in GET.
 	},
@@ -380,6 +386,41 @@ for (var test of ["","/test"]) {
 		.catch((err)=>{
 			res.status(500).send(err.message)
 		})
+	})
+	
+	app.get(PREFIX+test+"/userData",(req,res)=>{
+		if (req.query.token) {
+			discord.tokenRequest({
+				code:req.query.token,
+				grantType: "authorization_code",
+				scope: ["identify", "email"],
+			})
+			.then(res2=>{return discord.getUser(res2.access_token)})
+			.then(res2=>{
+				//Sample output. We can register the user from here.
+				//{"id":"176012829076226048","username":"sigonasr2","avatar":"c19b2f2a9d530f9f99efa3b1b573d7ef","discriminator":"6262","public_flags":0,"flags":0,"banner":"e0668c23567d5b58e88ea916306ec6d5","banner_color":null,"accent_color":null,"locale":"en-US","mfa_enabled":false,"premium_type":2,"email":"sigonasr2@gmail.com","verified":true}
+				/*var obj = {
+					body:{
+						recoveryhash:res2.id,
+						password:req.query.token,
+						username:res2.username,
+						avatar:"https://cdn.discordapp.com/avatars/"+res2.id+"/"+res2.avatar+".png",
+						userID:res2.id,
+						email:res2.email
+					}
+				}
+				registerUsers(obj,res)*/
+				res2.token=sh(req.query.token)
+				res.status(200).json(res2)
+			})
+			.catch((err)=>{
+				//console.log(err.response)
+				res.status(500).send("Everything is not fine")
+			})
+			//res.status(200).send("Everything is fine")
+		} else {
+			res.status(500).send("Everything is not fine")
+		}
 	})
 }
 
@@ -770,38 +811,66 @@ app.get(PREFIX+'/test/dataid',async(req,res)=>{
 	res.status(200).json(finalresult)
 })
 
-app.post(PREFIX+"/registerUser",(req,res)=>{
-	
+function registerUsers(req,res){
 	if (req.body.recoveryhash&&req.body.password) {
-		//A recovery hash means this is an external login. Try seeing if it matches.
-		db.query('select * from users where recovery_hash=$1 limit 1',[req.body.recoveryhash])
-		.then((data)=>{
-			if (data.rows.length>0) {
-				db.query('update users set password_hash=$2 where id=$1',[data.rows[0].id,req.body.password])
-				res.status(200).json({verified:true})
+		db.query('select * from users where email=$1',[req.body.email])
+		.then((data)=>{ 
+			if (data.rows.length==0) {
+				return db.query('select * from users where recovery_hash=$1 limit 1',[req.body.recoveryhash])
+				.then((data)=>{
+					if (data.rows.length>0) {
+						db.query('update users set username=$3,password_hash=$2 where id=$1',[data.rows[0].id,req.body.password,req.body.username])
+						db2.query('update users set username=$3,password_hash=$2 where id=$1',[data.rows[0].id,req.body.password,req.body.username])
+						res.status(200).json({verified:true})
+					} else {
+						res.status(200).json({verified:true})
+						//This doesn't exist. At this time we will register them since this is external.
+						db.query('insert into users(username,email,password_hash,created_on,roles_id,avatar,recovery_hash) values($1,$2,$3,$4,(select id from roles where name=\'Guest\'),$5,$6) returning id',[req.body.username,req.body.email,req.body.password,new Date(),req.body.avatar,req.body.userID])
+						.then((data)=>{
+							if (data.rows.length>0) {
+								db2.query('insert into users(username,email,password_hash,created_on,roles_id,avatar,recovery_hash,id) values($1,$2,$3,$4,(select id from roles where name=\'Guest\'),$5,$6,$7) returning id',[req.body.username,req.body.email,req.body.password,new Date(),req.body.avatar,req.body.userID,data.rows[0].id])
+							}
+						})
+						.catch((err)=>{
+							console.log(err.message)
+						})
+					}
+				})
+				.catch((err)=>{
+					console.log(err.message)
+					res.status(500).send(err.message)
+				})
 			} else {
+				console.log("User with email '"+req.body.email+"' already exists assume it's not a google account. Overwriting...")
+				//console.log(req.body.password)
+				db.query('update users set password_hash=$1,avatar=$2,recovery_hash=$3,username=$5 where id=$4 returning id',[req.body.password,req.body.avatar,req.body.userID,data.rows[0].id,req.body.username])
+				.then((data)=>{
+					if (data.rows.length>0) {
+						db2.query('update users set password_hash=$1,avatar=$2,recovery_hash=$3,username=$5 where id=$4 returning id',[req.body.password,req.body.avatar,req.body.userID,data.rows[0].id,req.body.username])
+					}
+				})
 				res.status(200).json({verified:true})
-				//This doesn't exist. At this time we will register them since this is external.
-				db.query('insert into users(username,email,password_hash,created_on,roles_id,avatar,recovery_hash) values($1,$2,$3,$4,(select id from roles where name=\'Guest\'),$5,$6)',[req.body.username,req.body.email,req.body.password,new Date(),req.body.avatar,req.body.userID])
 			}
 		})
 		.catch((err)=>{
-			console.log(err.message)
-			res.status(500).send(err.message)
+			
 		})
 	} else {
 		res.status(500).send("Unsupported operation!")
 	}
-})
+}
 
-app.post(PREFIX+"/validUser",(req,res)=>{
-	//console.log(sh.SecretHash("098f6bcd4621d373cade4e832627b4f6"))
+app.post(PREFIX+"/registerUser",registerUsers)
+app.post(PREFIX+"/test/registerUser",registerUsers)
+
+function validUser(req,res) {
+	//console.log(sh("098f6bcd4621d373cade4e832627b4f6"))
 	if (req.body.recoveryhash&&req.body.password) {
 		//A recovery hash means this is an external login. Try seeing if it matches something.
 		db.query('select * from users where recovery_hash=$1 and password_hash=$2 limit 1',[req.body.recoveryhash,req.body.password])
 		.then((data)=>{
 			if (data.rows.length>0) {
-				res.status(200).json({verified:true})
+				res.status(200).json({verified:true,avatar:data.rows[0].avatar})
 			} else {
 				res.status(200).json({verified:false})
 			}
@@ -810,7 +879,7 @@ app.post(PREFIX+"/validUser",(req,res)=>{
 			res.status(500).send(err.message)
 		})
 	} else {
-		db.query('select * from users where username=$1 and password_hash=$2 limit 1',[req.body.username,sh.SecretHash(req.body.password)])
+		db.query('select * from users where username=$1 and password_hash=$2 limit 1',[req.body.username,sh(req.body.password)])
 		.then((data)=>{
 			if (data.rows.length>0) {
 				res.status(200).json({verified:true})
@@ -822,7 +891,10 @@ app.post(PREFIX+"/validUser",(req,res)=>{
 			res.status(500).send(err.message)
 		})
 	}
-})
+}
+
+app.post(PREFIX+"/validUser",validUser)
+app.post(PREFIX+"/test/validUser",validUser)
 
 app.post(PREFIX+"/saveskilltree",(req,res)=>{
 	db4.query('select * from password where password=$1',[req.body.pass])
@@ -881,11 +953,14 @@ function submitBuild(req,res,db,send) {
 		db.query('select users.username from builds join users on users_id=users.id where builds.id=$1',[req.body.id])
 		.then((data)=>{
 			console.log(data.rows)
-			if (data.rows.length>0&&data.rows[0].username===req.body.username) {
+			if (data.rows.length>0&&data.rows[0].username===req.body.username&&data.rows[0].password_hash===sh(req.body.pass)) {
 				return db.query('update builds set creator=$1,build_name=$2,class1=(SELECT id from class WHERE name=$3 limit 1),class2=(SELECT id from class WHERE name=$4 limit 1),last_modified=$5,data=$6 where id=$7 returning id',[req.body.creator,req.body.build_name,req.body.class1,req.body.class2,new Date(),req.body.data,req.body.id])
 					.then((data)=>{
 						if (send) {
-							res.status(200).send(data.rows[0])
+							res.status(200).json(data.rows[0])
+						}
+						if (db2) {
+							db2.query('update builds set creator=$1,build_name=$2,class1=(SELECT id from class WHERE name=$3 limit 1),class2=(SELECT id from class WHERE name=$4 limit 1),last_modified=$5,data=$6 where id=$7 returning id',[req.body.creator,req.body.build_name,req.body.class1,req.body.class2,new Date(),req.body.data,req.body.id])
 						}
 					})
 					.catch((err)=>{
@@ -898,7 +973,10 @@ function submitBuild(req,res,db,send) {
 				return db.query('insert into builds(users_id,creator,build_name,class1,class2,created_on,last_modified,likes,data,editors_choice) values((SELECT id from users WHERE username=$1 limit 1),$2,$3,(SELECT id from class WHERE name=$4 limit 1),(SELECT id from class WHERE name=$5 limit 1),$6,$7,$8,$9,$10) returning id',[req.body.username,req.body.creator,req.body.build_name,req.body.class1,req.body.class2,new Date(),new Date(),0,req.body.data,0])
 					.then((data)=>{
 						if (send) {
-							res.status(200).send(data.rows[0])
+							res.status(200).json(data.rows[0])
+						}
+						if (db2) {
+							db2.query('insert into builds(users_id,creator,build_name,class1,class2,created_on,last_modified,likes,data,editors_choice,id) values((SELECT id from users WHERE username=$1 limit 1),$2,$3,(SELECT id from class WHERE name=$4 limit 1),(SELECT id from class WHERE name=$5 limit 1),$6,$7,$8,$9,$10,$11) returning id',[req.body.username,req.body.creator,req.body.build_name,req.body.class1,req.body.class2,new Date(),new Date(),0,req.body.data,0,data.rows[0].id])
 						}
 					})
 					.catch((err)=>{
@@ -919,7 +997,10 @@ function submitBuild(req,res,db,send) {
 		db.query('insert into builds(users_id,creator,build_name,class1,class2,created_on,last_modified,likes,data,editors_choice) values((SELECT id from users WHERE username=$1 limit 1),$2,$3,(SELECT id from class WHERE name=$4 limit 1),(SELECT id from class WHERE name=$5 limit 1),$6,$7,$8,$9,$10) returning id',[req.body.username,req.body.creator,req.body.build_name,req.body.class1,req.body.class2,new Date(),new Date(),0,req.body.data,0])
 		.then((data)=>{
 			if (send) {
-				res.status(200).send(data.rows[0])
+				res.status(200).json(data.rows[0])
+			}
+			if (db2) {
+				db2.query('insert into builds(users_id,creator,build_name,class1,class2,created_on,last_modified,likes,data,editors_choice,id) values((SELECT id from users WHERE username=$1 limit 1),$2,$3,(SELECT id from class WHERE name=$4 limit 1),(SELECT id from class WHERE name=$5 limit 1),$6,$7,$8,$9,$10,$11) returning id',[req.body.username,req.body.creator,req.body.build_name,req.body.class1,req.body.class2,new Date(),new Date(),0,req.body.data,0,data.rows[0].id])
 			}
 		})
 		.catch((err)=>{
@@ -933,12 +1014,86 @@ function submitBuild(req,res,db,send) {
 
 app.post(PREFIX+"/submitBuild",(req,res)=>{
 	submitBuild(req,res,db,true)
-	submitBuild(req,res,db2,false)
 })
 
 app.post(PREFIX+"/test/submitBuild",(req,res)=>{
 	submitBuild(req,res,db,true)
-	submitBuild(req,res,db2,false)
+})
+
+app.get(PREFIX+"/getBuild",(req,res)=>{
+	db.query('select * from builds where id=$1 limit 1',[req.query.id])
+	.then((data)=>{
+		res.status(200).json(data.rows[0])
+	})
+	.catch((err)=>{
+		res.status(500).send(err.message)
+	})
+})
+
+app.get(PREFIX+"/test/getBuild",(req,res)=>{
+	db2.query('select * from builds where id=$1 limit 1',[req.query.id])
+	.then((data)=>{
+		res.status(200).json(data.rows[0])
+	})
+	.catch((err)=>{
+		res.status(500).send(err.message)
+	})
+})
+
+function buildsGet(req,res,db) {
+	function FilterQuery(filter_type,filter){
+		function ConvertFilterType(fil) {
+			switch(fil) {
+				case "author":{return "creator"}break;
+				case "build":{return "build_name"}break;
+				case "editors_choice":{return "editors_choice"}break;
+				case "class1":{return "class1"}break;
+				case "class2":{return "class2"}break;
+			}
+		}
+		if (filter_type=="class1"||filter_type=="class2") {
+			return `${filter_type?`where ${filter_type}=${filter}`:""}`
+		} else {
+			return `${filter_type?`where ${ConvertFilterType(filter_type)} ilike '%${filter}%'`:""}`
+		}
+	}
+	function SortQuery(sort_type){
+		function ConvertSortType(sor) {
+			switch (sor) {
+				case "date_updated":{return "last_modified desc"}break;
+				case "alphabetical":{return "build_name asc"}break;
+				case "date_created":{return "created_on desc"}break;
+				case "popularity":{return "likes desc"}break
+				case "editors_choice":{return "editors_choice desc"}break;
+				case "author":{return "creator asc"}break;
+			}
+		}
+		return `${sort_type?`order by ${ConvertSortType(sort_type)}`:""}`
+	}
+	function OffsetQuery(page){
+		return `${page?`offset ${page*20}`:""}`
+	}
+
+	//No args gets recent 20 builds.
+	//sort_type can be date_updated(default), alphabetical, date_created, popularity, editors_choice, author.
+	//filter_type can be author,build,editors_choice,class1,class2
+	//filter is the actual contents of the filter.
+	//page can be a number, a new page is generated every 20 builds.
+	db.query('select * from builds '+FilterQuery(req.query.filter_type,req.query.filter)+' '+SortQuery(req.query.sort_type)+' limit 20 '+OffsetQuery(req.query.page),[])
+	.then((data)=>{
+		res.status(200).json(data.rows)
+	})
+	.catch((err)=>{
+		res.status(500).send(err.message)
+	})
+}
+
+app.get(PREFIX+"/getBuilds",(req,res)=>{
+	buildsGet(req,res,db)
+})
+
+app.get(PREFIX+"/test/getBuilds",(req,res)=>{
+	buildsGet(req,res,db2)
 })
 
 //Generates our table schema:
