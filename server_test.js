@@ -1077,7 +1077,7 @@ function buildsGet(req,res,db) {
 	//page can be a number, a new page is generated every 20 builds.
 	db.query('select * from builds '+FilterQuery(req.query.filter_type,req.query.filter)+' '+SortQuery(req.query.sort_type)+' limit 20 '+OffsetQuery(req.query.page),[])
 	.then((data)=>{
-		res.status(200).json(data.rows[0])
+		res.status(200).json(data.rows)
 	})
 	.catch((err)=>{
 		res.status(500).send(err.message)
