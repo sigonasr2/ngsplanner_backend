@@ -4,3 +4,4 @@ alter table augment add column element_id int;
 alter table augment add column icon text;
 alter table augment_type drop column icon;
 alter table food add column rarity int;
+alter table food add column food_type text;

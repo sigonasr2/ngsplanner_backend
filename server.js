@@ -199,8 +199,8 @@ const ENDPOINTDATA=[
 	},
 	{
 		endpoint:"food",
-		requiredfields:["name","rarity"],
-		optionalfields:["potency","pp","dmg_res","hp","pp_consumption","pp_recovery","weak_point_dmg","hp_recovery","popularity","editors_choice"],
+		requiredfields:["name","rarity","food_type"],
+		optionalfields:["potency","pp","dmg_res","hp","pp_consumption","pp_recovery","weak_point_dmg","hp_recovery","popularity","editors_choice","description","icon"],
 		excludedfields:[] //Fields to not output in GET.
 	},
 	{

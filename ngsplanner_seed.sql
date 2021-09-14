@@ -30,10 +30,10 @@ insert into food_mult(amount,potency,pp,dmg_res,hp,pp_consumption,pp_recovery,we
 insert into food_mult(amount,potency,pp,dmg_res,hp,pp_consumption,pp_recovery,weak_point_dmg,hp_recovery)
 	values(1,1.05,10,1.05,1.05,1,1,1,1);
 
-insert into food(name,description,icon,potency,pp,dmg_res,hp,pp_consumption,pp_recovery,weak_point_dmg,hp_recovery,popularity,editors_choice,rarity)
-	values('Rich Aelio Meat','Meat','',true,false,false,false,true,false,false,false,0,0,1);
-insert into food(name,description,icon,potency,pp,dmg_res,hp,pp_consumption,pp_recovery,weak_point_dmg,hp_recovery,popularity,editors_choice,rarity)
-	values('Light Aelio Meat','Meat','',true,false,false,false,false,true,false,false,0,0,2);
+insert into food(name,description,icon,potency,pp,dmg_res,hp,pp_consumption,pp_recovery,weak_point_dmg,hp_recovery,popularity,editors_choice,rarity,food_type)
+	values('Rich Aelio Meat','Meat','',true,false,false,false,true,false,false,false,0,0,1,'meat');
+insert into food(name,description,icon,potency,pp,dmg_res,hp,pp_consumption,pp_recovery,weak_point_dmg,hp_recovery,popularity,editors_choice,rarity,food_type)
+	values('Light Aelio Meat','Meat','',true,false,false,false,false,true,false,false,0,0,2,'meat');
 	
 insert into class(name,icon) values('Hunter','/icons/UINGSClassHu.png');
 insert into class(name,icon) values('Fighter','/icons/UINGSClassFi.png');

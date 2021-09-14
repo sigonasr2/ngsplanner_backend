@@ -26,7 +26,8 @@ CREATE TABLE "food" (
   "hp_recovery" boolean,
   "popularity" int,
   "editors_choice" int,
-  "rarity" int
+  "rarity" int,
+  "food_type" text
 );
 
 CREATE TABLE "class" (
