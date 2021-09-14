@@ -1051,7 +1051,11 @@ function buildsGet(req,res,db) {
 				case "class2":{return "class2"}break;
 			}
 		}
-		return `${filter_type?`where ${ConvertFilterType(filter_type)} ilike '%${filter}%'`:""}`
+		if (filter_type=="class1"||filter_type=="class2") {
+			return `${filter_type?`where ${filter_type}=${filter}`:""}`
+		} else {
+			return `${filter_type?`where ${ConvertFilterType(filter_type)} ilike '%${filter}%'`:""}`
+		}
 	}
 	function SortQuery(sort_type){
 		function ConvertSortType(sor) {
