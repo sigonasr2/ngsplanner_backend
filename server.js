@@ -244,6 +244,12 @@ const ENDPOINTDATA=[
 		requiredfields:["name"],
 		optionalfields:[],
 		excludedfields:[] //Fields to not output in GET.
+	},
+	{
+		endpoint:"like_data",
+		requiredfields:["builds_id","name"],
+		optionalfields:[],
+		excludedfields:[] //Fields to not output in GET.
 	}
 ]
 
@@ -251,6 +257,11 @@ const MAXATTEMPTS=5
 const LOCKOUTTIME=60000
 var failedattempts=0
 var lockedTime=new Date().getTime()-LOCKOUTTIME //Starts unlocked
+
+var IPDatabase = {}
+setInterval(()=>{
+	IPDatabase={}	
+},24*60*60*1000)
 
 for (var test of ["","/test"]) {
 
@@ -1140,6 +1151,41 @@ app.get(PREFIX+"/getBuilds",(req,res)=>{
 
 app.get(PREFIX+"/test/getBuilds",(req,res)=>{
 	buildsGet(req,res,db2)
+})
+
+function likesGet(req,res,db) {
+	var likesData={}
+	db.query('select COUNT(*) from like_data where builds_id=$1',[req.query.build])
+	.then((data)=>{
+		likesData["likeCount"]=data.rows[0].count
+		return db.query('select * from like_data where name=$1',[req.query.name])
+	})
+	.then((data)=>{
+		likesData["liked"]=data.rows.length>0
+		res.status(200).json(likesData)
+	})
+	.catch((err)=>{
+		console.log(err.message)
+		res.status(500).send(err.message)
+	})
+}
+
+app.get(PREFIX+"/getLikes",(req,res)=>{
+	likesGet(req,res,db)
+})
+
+app.get(PREFIX+"/test/getLikes",(req,res)=>{
+	likesGet(req,res,db2)
+})
+
+app.post(PREFIX+"/submitLike",(req,res)=>{
+	res.status(200).send("Ok")
+	if (verifyToken(req.body.ip,req.body.token)) {
+		db.query('select id from like_data where name=$1')
+		.then((data)=>{
+			
+		})
+	}
 })
 
 //Generates our table schema:
